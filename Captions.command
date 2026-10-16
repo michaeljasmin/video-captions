@@ -19,7 +19,8 @@ main() {
 
   if [[ -d .git ]]; then
     echo "Recherche de mises à jour…"
-    if git pull --ff-only --quiet 2>/dev/null; then
+    # Pas de demande de mot de passe : si GitHub refuse, on lance simplement la version actuelle.
+    if GIT_TERMINAL_PROMPT=0 git pull --ff-only --quiet 2>/dev/null; then
       echo "À jour : $(git log -1 --format='%s (%cr)')"
     else
       echo "Mise à jour impossible pour l'instant (hors ligne ?). Lancement de la version actuelle."

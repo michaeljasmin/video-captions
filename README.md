@@ -10,14 +10,28 @@ Sous-titres automatiques pour vidéos TikTok / Instagram, 100 % en local sur le 
 
 ## Installer (une seule fois)
 
-Ouvre l'app **Terminal** et colle :
+Le dépôt est privé : il faut un compte GitHub invité comme collaborateur
+(Settings › Collaborators sur github.com/michaeljasmin/captions), et accepter l'invitation reçue par courriel.
+
+Ensuite, ouvre l'app **Terminal** et colle :
 
 ```bash
-git clone https://github.com/michaeljasmin/captions.git ~/Captions && open ~/Captions/Installer.command
+/bin/zsh -c 'set -e
+[[ -x /opt/homebrew/bin/brew ]] || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/opt/homebrew/bin/brew shellenv)"
+command -v gh >/dev/null || brew install gh
+gh auth status >/dev/null 2>&1 || gh auth login --web --git-protocol https --hostname github.com
+gh auth setup-git
+[[ -d ~/Captions ]] || gh repo clone michaeljasmin/captions ~/Captions
+open ~/Captions/Installer.command'
 ```
 
-- Si le Mac propose d'installer les « outils de ligne de commande », accepte, puis recolle la commande.
-- L'installateur s'occupe de Homebrew, ffmpeg, Python et du modèle Whisper (~3 Go). Compte environ 15 minutes.
+Ce qui va se passer :
+
+1. Homebrew s'installe si besoin : ton mot de passe Mac est demandé (rien ne s'affiche quand tu tapes, c'est normal).
+2. GitHub affiche un code à 8 caractères : appuie sur Entrée, le navigateur s'ouvre, colle le code et autorise.
+3. L'app est téléchargée dans le dossier `Captions` de ton dossier personnel, puis l'installateur s'ouvre :
+   ffmpeg, Python et le modèle Whisper (~3 Go). Compte environ 15 minutes au total.
 
 ## Lancer
 
