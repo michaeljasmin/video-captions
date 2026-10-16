@@ -13,7 +13,7 @@ Sous-titres automatiques pour vidéos TikTok / Instagram, 100 % en local sur le 
 Ouvre l'app **Terminal** et colle :
 
 ```bash
-git clone https://github.com/michaeljasmin/captions.git ~/Captions && open ~/Captions/Installer.command
+git clone https://github.com/michaeljasmin/video-captions.git ~/Captions && open ~/Captions/Installer.command
 ```
 
 Ce qui va se passer :
