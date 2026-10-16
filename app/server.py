@@ -1,6 +1,7 @@
 """Captions locales : transcription Whisper (MLX) + incrustation des sous-titres avec ffmpeg."""
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -20,9 +21,36 @@ DATA.mkdir(exist_ok=True)
 
 WHISPER_MODEL = "mlx-community/whisper-large-v3-mlx"
 
+IDLE_TIMEOUT = int(os.environ.get("CAPTIONS_IDLE_TIMEOUT", 600))  # arrêt automatique 10 min après la fermeture du dernier onglet
+
 app = FastAPI()
 jobs: dict[str, dict] = {}  # état en mémoire des transcriptions / exports
 whisper_lock = threading.Lock()  # un seul modèle en mémoire à la fois
+last_activity = time.time()
+
+
+@app.middleware("http")
+async def track_activity(request, call_next):
+    global last_activity
+    last_activity = time.time()
+    return await call_next(request)
+
+
+def idle_watchdog():
+    """L'onglet ouvert envoie un ping chaque minute ; sans signe de vie et sans tâche en cours, on s'arrête."""
+    while True:
+        time.sleep(30)
+        busy = any(j.get("status") in {"queued", "running"} for j in jobs.values())
+        if not busy and time.time() - last_activity > IDLE_TIMEOUT:
+            os._exit(0)
+
+
+threading.Thread(target=idle_watchdog, daemon=True).start()
+
+
+@app.get("/api/ping")
+def ping():
+    return {"app": "captions"}
 
 
 def job_dir(vid: str) -> Path:

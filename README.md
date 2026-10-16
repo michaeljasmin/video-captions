@@ -19,20 +19,22 @@ git clone https://github.com/michaeljasmin/video-captions.git ~/Captions && open
 Ce qui va se passer :
 
 1. Si le Mac propose d'installer les « outils de ligne de commande », accepte, attends la fin, puis recolle la commande.
-2. L'app est téléchargée dans le dossier `Captions` de ton dossier personnel, et l'installateur s'ouvre.
+2. Le code est téléchargé dans le dossier `Captions` de ton dossier personnel (ne le déplace pas), et l'installateur s'ouvre.
 3. Il installe Homebrew si besoin (ton mot de passe Mac est demandé, rien ne s'affiche quand tu tapes, c'est normal),
-   puis ffmpeg, Python et le modèle Whisper (~3 Go). Compte environ 15 minutes au total.
+   puis ffmpeg, Python, le modèle Whisper (~3 Go) et l'app **Captions** dans le dossier Applications.
+   Compte environ 15 minutes au total. À la fin, l'app s'ouvre toute seule.
 
 ## Lancer
 
-Double-clique `Captions.command` dans le dossier `Captions` (dans ton dossier personnel).
-Le navigateur s'ouvre sur http://localhost:8765. Ferme la fenêtre Terminal pour arrêter l'app.
+Ouvre **Captions** depuis le dossier Applications, le Launchpad ou Spotlight (⌘ Espace, « Captions »).
+L'app s'ouvre dans le navigateur. Pour l'avoir sous la main, glisse-la dans le Dock.
 
-Astuce : glisse `Captions.command` dans le Dock (à droite de la ligne) pour l'avoir sous la main.
+Rien à fermer : l'app s'arrête toute seule 10 minutes après la fermeture de son onglet.
+En cas de problème, une fenêtre d'erreur s'affiche (journal : `data/server.log`).
 
 ## Mises à jour
 
-Automatiques : à chaque lancement, l'app récupère la dernière version sur GitHub.
+Automatiques et silencieuses : à chaque lancement, l'app récupère la dernière version sur GitHub.
 
 ## Fichiers
 

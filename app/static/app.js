@@ -555,3 +555,6 @@ document.addEventListener("keydown", (e) => {
 
 syncStyleInputs();
 requestAnimationFrame(previewLoop);
+
+// Signe de vie : le serveur s'arrête seul quelques minutes après la fermeture du dernier onglet.
+setInterval(() => fetch("/api/ping").catch(() => {}), 60_000);
