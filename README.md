@@ -36,6 +36,22 @@ En cas de problème, une fenêtre d'erreur s'affiche (journal : `data/server.log
 
 Automatiques et silencieuses : à chaque lancement, l'app récupère la dernière version sur GitHub.
 
+## Désinstaller
+
+Attention : ça supprime aussi les vidéos gardées dans `~/Captions/data`. Récupère d'abord celles que tu veux garder.
+
+Ouvre l'app **Terminal** et colle :
+
+```bash
+pkill -f "uvicorn app.server:app"; rm -rf /Applications/Captions.app ~/Applications/Captions.app ~/Captions ~/.cache/huggingface/hub/models--mlx-community--whisper-large-v3-mlx
+```
+
+Ça arrête l'app, puis supprime l'app, son dossier et le modèle Whisper (~3 Go libérés).
+Si Captions est dans le Dock : clic droit › Options › Retirer du Dock.
+
+Homebrew, ffmpeg et Python restent installés, car d'autres outils peuvent s'en servir.
+Pour retirer aussi ffmpeg : `brew uninstall ffmpeg`.
+
 ## Fichiers
 
 Les vidéos envoyées et exportées sont gardées dans `data/`. Supprime ce dossier pour libérer de l'espace.
