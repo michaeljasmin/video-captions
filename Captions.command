@@ -2,8 +2,11 @@
 # Double-clique ce fichier pour lancer l'app Captions, puis ferme la fenêtre Terminal pour l'arrêter.
 # Tout est dans une fonction : le script est lu en entier avant de s'exécuter,
 # donc une mise à jour de ce fichier par « git pull » ne casse pas le lancement en cours.
+# Dans une fonction zsh, $0 vaut le nom de la fonction : on lit le chemin du script avant.
+APP_DIR="${0:A:h}"
+
 main() {
-  cd "$(dirname "$0")"
+  cd "$APP_DIR"
   eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)"
   if [[ ! -x .venv/bin/uvicorn ]]; then
     echo "L'app n'est pas encore installée : double-clique d'abord « Installer.command »."
