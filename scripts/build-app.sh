@@ -19,6 +19,9 @@ EOF
 
 osacompile -o "$BUILD" "$TMP/main.applescript"
 cp "$APP_DIR/assets/Captions.icns" "$BUILD/Contents/Resources/applet.icns"
+# osacompile ajoute une icône par défaut dans Assets.car (CFBundleIconName), prioritaire sur le .icns : on la retire.
+rm -f "$BUILD/Contents/Resources/Assets.car"
+plutil -remove CFBundleIconName "$BUILD/Contents/Info.plist" 2>/dev/null || true
 plutil -replace CFBundleIdentifier -string "com.burotic.captions" "$BUILD/Contents/Info.plist"
 plutil -replace CFBundleName -string "$NAME" "$BUILD/Contents/Info.plist"
 codesign --force --deep --sign - "$BUILD" 2>/dev/null
@@ -29,5 +32,6 @@ DEST=/Applications
 rm -rf "$DEST/$NAME.app"
 mv "$BUILD" "$DEST/"
 touch "$DEST/$NAME.app"  # rafraîchit l'icône dans le Finder
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST/$NAME.app" 2>/dev/null || true
 rm -rf "$TMP"
 echo "$DEST/$NAME.app"
