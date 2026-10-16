@@ -1,0 +1,6 @@
+fastapi==0.143.3
+starlette==1.8.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+mlx==0.32.4
+mlx-whisper==0.4.3

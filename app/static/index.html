@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captions</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Captions</h1>
+    <span class="sub">Whisper large-v3 · 100 % local</span>
+    <button id="newVideo" class="ghost hidden">Nouvelle vidéo</button>
+  </header>
+
+  <!-- Étape 1 : dépôt de la vidéo -->
+  <section id="drop" class="drop">
+    <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v,.mkv,.webm" hidden>
+    <div class="drop-inner">
+      <div class="drop-title">Glisse ta vidéo ici</div>
+      <div class="drop-hint">ou <button id="pick" class="link">choisis un fichier</button> · MP4, MOV</div>
+      <div id="uploadStatus" class="status"></div>
+    </div>
+  </section>
+
+  <!-- Étape 2 : éditeur -->
+  <main id="editor" class="hidden">
+    <div class="stage-col">
+      <div id="stage" class="stage">
+        <video id="video" controls playsinline preload="auto"></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="videoInfo" class="info"></div>
+    </div>
+
+    <div class="panel-col">
+      <section class="card">
+        <h2>1. Transcription</h2>
+        <div class="row">
+          <label>Langue
+            <select id="language">
+              <option value="fr" selected>Français</option>
+              <option value="en">Anglais</option>
+              <option value="es">Espagnol</option>
+              <option value="auto">Détection auto</option>
+            </select>
+          </label>
+        </div>
+        <label>Mots spéciaux <span class="muted">(noms, marques — aide Whisper à bien les écrire)</span>
+          <input id="prompt" type="text" placeholder="ex. Burotic, Shopify, bureau assis-debout">
+        </label>
+        <button id="transcribeBtn" class="primary">Transcrire la vidéo</button>
+        <div id="transcribeStatus" class="status"></div>
+        <details id="rulesBox">
+          <summary>Corrections automatiques <span id="rulesCount" class="muted"></span></summary>
+          <p class="muted small-text">Une règle par ligne. Appliquées après chaque transcription et mémorisées.</p>
+          <textarea id="rules" rows="3" placeholder="bureautique => Burotic&#10;assis debout => assis-debout"></textarea>
+          <button id="applyRules" class="ghost small">Appliquer au texte actuel</button>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>2. Style</h2>
+        <div class="grid">
+          <label>Police
+            <select id="s-font">
+              <option>Inter</option>
+              <option>Montserrat</option>
+              <option>Poppins</option>
+              <option>Roboto</option>
+              <option>Arial</option>
+            </select>
+          </label>
+          <label>Graisse
+            <select id="s-weight">
+              <option value="400">Regular</option>
+              <option value="500">Medium</option>
+              <option value="600">Semi-bold</option>
+              <option value="700">Bold</option>
+              <option value="800">Extra-bold</option>
+              <option value="900">Black</option>
+            </select>
+          </label>
+          <label>Taille <output id="o-size"></output>
+            <input id="s-size" type="range" min="3" max="12" step="0.1">
+          </label>
+          <label>Position verticale <output id="o-pos"></output>
+            <input id="s-pos" type="range" min="10" max="92" step="1">
+          </label>
+          <label>Couleur du texte
+            <input id="s-color" type="color">
+          </label>
+          <label>Ombre <output id="o-shadow"></output>
+            <input id="s-shadow" type="range" min="0" max="100" step="1">
+          </label>
+          <label class="check"><input id="s-outline" type="checkbox"> Contour noir</label>
+          <label class="check"><input id="s-upper" type="checkbox"> MAJUSCULES</label>
+          <label class="check"><input id="s-punct" type="checkbox"> Retirer la ponctuation</label>
+          <label>Mots par caption <output id="o-words"></output>
+            <input id="s-words" type="range" min="1" max="10" step="1">
+          </label>
+        </div>
+        <button id="resetStyle" class="ghost small">Style par défaut</button>
+      </section>
+
+      <section class="card grow">
+        <h2>3. Texte <span id="capCount" class="muted"></span></h2>
+        <p class="muted small-text">Clique sur un temps pour y aller. Corrige le texte directement.</p>
+        <div id="captions" class="captions"><div class="empty">Lance la transcription pour voir le texte ici.</div></div>
+      </section>
+
+      <section class="card">
+        <h2>4. Export</h2>
+        <button id="exportBtn" class="primary" disabled>Exporter la vidéo</button>
+        <div id="exportStatus" class="status"></div>
+        <div class="bar hidden" id="exportBar"><div></div></div>
+        <a id="downloadLink" class="primary button hidden" download>Télécharger</a>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
