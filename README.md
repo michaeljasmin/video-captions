@@ -27,14 +27,16 @@ Ce qui va se passer :
 ## Lancer
 
 Ouvre **Captions** depuis le dossier Applications, le Launchpad ou Spotlight (⌘ Espace, « Captions »).
-L'app s'ouvre dans le navigateur. Pour l'avoir sous la main, glisse-la dans le Dock.
+L'app s'ouvre dans sa propre fenêtre. Pour l'avoir sous la main, glisse-la dans le Dock.
 
-Rien à fermer : l'app s'arrête toute seule 10 minutes après la fermeture de son onglet.
-En cas de problème, une fenêtre d'erreur s'affiche (journal : `data/server.log`).
+- Exporter : bouton « Exporter la vidéo », puis « Enregistrer la vidéo… » pour choisir où la sauvegarder.
+- Quitter : ⌘Q ou fermer la fenêtre. Tout s'arrête avec l'app.
+- En cas de problème, une fenêtre d'erreur s'affiche (journal : `data/server.log`).
 
 ## Mises à jour
 
 Automatiques et silencieuses : à chaque lancement, l'app récupère la dernière version sur GitHub.
+Si l'app elle-même a changé, la nouvelle version s'installe en arrière-plan et sert au lancement suivant.
 
 ## Désinstaller
 
@@ -43,7 +45,7 @@ Attention : ça supprime aussi les vidéos gardées dans `~/Captions/data`. Réc
 Ouvre l'app **Terminal** et colle :
 
 ```bash
-pkill -f "uvicorn app.server:app"; rm -rf /Applications/Captions.app ~/Applications/Captions.app ~/Captions ~/.cache/huggingface/hub/models--mlx-community--whisper-large-v3-mlx
+osascript -e 'quit app "Captions"'; pkill -f "uvicorn app.server:app"; rm -rf /Applications/Captions.app ~/Applications/Captions.app ~/Captions ~/.cache/huggingface/hub/models--mlx-community--whisper-large-v3-mlx
 ```
 
 Ça arrête l'app, puis supprime l'app, son dossier et le modèle Whisper (~3 Go libérés).

@@ -528,7 +528,9 @@ async function pollExport() {
     setStatus("exportStatus", `Prêt en ${Math.round(job.elapsed)} s · ${fmtSize(job.size)}`, "ok");
     const link = $("downloadLink");
     link.href = `/api/export/${state.meta.id}/download`;
-    link.textContent = `Télécharger ${job.download_name}`;
+    link.textContent = native ? "Enregistrer la vidéo…" : `Télécharger ${job.download_name}`;
+    link.dataset.path = job.path;
+    link.dataset.name = job.download_name;
     link.classList.remove("hidden");
     $("exportBtn").disabled = false;
     return;
@@ -553,8 +555,22 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- App Mac (Captions.app) : fenêtre « Enregistrer sous… » native ----------
+
+const native = window.webkit?.messageHandlers?.captions;
+
+$("downloadLink").addEventListener("click", (e) => {
+  if (!native) return; // navigateur : téléchargement classique
+  e.preventDefault();
+  native.postMessage({ type: "save", path: e.currentTarget.dataset.path, name: e.currentTarget.dataset.name });
+});
+window.nativeSaveStarted = () => setStatus("exportStatus", "Enregistrement…");
+window.nativeSaved = (path) => setStatus("exportStatus", `Enregistrée : ${path.split("/").pop()}`, "ok");
+window.nativeSaveFailed = (msg) => setStatus("exportStatus", "Enregistrement impossible : " + msg, "error");
+
+// Un fichier lâché à côté de la zone de dépôt ne doit pas remplacer la page.
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => e.preventDefault());
+
 syncStyleInputs();
 requestAnimationFrame(previewLoop);
-
-// Signe de vie : le serveur s'arrête seul quelques minutes après la fermeture du dernier onglet.
-setInterval(() => fetch("/api/ping").catch(() => {}), 60_000);

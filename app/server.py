@@ -21,31 +21,42 @@ DATA.mkdir(exist_ok=True)
 
 WHISPER_MODEL = "mlx-community/whisper-large-v3-mlx"
 
-IDLE_TIMEOUT = int(os.environ.get("CAPTIONS_IDLE_TIMEOUT", 600))  # arrêt automatique 10 min après la fermeture du dernier onglet
-
 app = FastAPI()
 jobs: dict[str, dict] = {}  # état en mémoire des transcriptions / exports
 whisper_lock = threading.Lock()  # un seul modèle en mémoire à la fois
-last_activity = time.time()
 
 
-@app.middleware("http")
-async def track_activity(request, call_next):
-    global last_activity
-    last_activity = time.time()
-    return await call_next(request)
+def busy() -> bool:
+    return any(j.get("status") in {"queued", "running"} for j in jobs.values())
 
 
-def idle_watchdog():
-    """L'onglet ouvert envoie un ping chaque minute ; sans signe de vie et sans tâche en cours, on s'arrête."""
+def stop_ffmpeg():
+    for job in jobs.values():
+        if job.get("proc"):
+            job["proc"].kill()
+
+
+def parent_watchdog():
+    """Lancé par Captions.app : si l'app disparaît (plantage, arrêt forcé), on s'arrête aussi."""
+    parent = os.getppid()
     while True:
-        time.sleep(30)
-        busy = any(j.get("status") in {"queued", "running"} for j in jobs.values())
-        if not busy and time.time() - last_activity > IDLE_TIMEOUT:
+        time.sleep(2)
+        if os.getppid() != parent:
+            stop_ffmpeg()
             os._exit(0)
 
 
-threading.Thread(target=idle_watchdog, daemon=True).start()
+threading.Thread(target=parent_watchdog, daemon=True).start()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_ffmpeg()
+
+
+@app.get("/api/busy")
+def is_busy():
+    return {"busy": busy()}
 
 
 @app.get("/api/ping")
@@ -262,7 +273,7 @@ def run_export(vid: str, captions: list[dict]):
             raise RuntimeError(stderr.strip().splitlines()[-1] if stderr.strip() else "ffmpeg a échoué")
         name = Path(meta["name"] or "video").stem + "_captions" + out_ext
         job.update(status="done", progress=1.0, file=out.name, download_name=name,
-                   size=out.stat().st_size)
+                   size=out.stat().st_size, path=str(out))
     except Exception as e:
         job.update(status="error", error=str(e))
     finally:
