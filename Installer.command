@@ -33,6 +33,7 @@ if [[ -z "$PY" ]]; then
 fi
 echo "Python : $PY"
 [[ -x .venv/bin/python ]] || "$PY" -m venv .venv
+echo "Installation des dépendances (1 à 3 minutes, sans affichage : c'est normal)…"
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -r requirements.txt && shasum requirements.txt | cut -d" " -f1 > .venv/.req-hash
 echo "OK"
