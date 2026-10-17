@@ -99,6 +99,19 @@ main {
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
 .card.grow { flex: 1 0 260px; display: flex; flex-direction: column; min-height: 260px; }
 
+/* Sections repliables : clic sur le titre. La section 3 (Texte) prend l'espace libéré. */
+.card h2.toggle { cursor: pointer; user-select: none; -webkit-user-select: none; display: flex; align-items: center; gap: 8px; }
+.card h2.toggle::before {
+  content: ""; width: 6px; height: 6px; flex: none; margin: 0 2px 2px 1px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg); transition: transform .15s;
+}
+.card h2.toggle:hover::before { border-color: var(--text); }
+.card.collapsed h2.toggle::before { transform: rotate(-45deg); margin: 0 3px 0 0; }
+.card.collapsed > :not(h2):not(.card-head) { display: none !important; }
+.card.collapsed h2, .card.collapsed .card-head { margin-bottom: 0; }
+.card.grow.collapsed { flex: 0 0 auto; min-height: 0; }
+
 label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 label output { color: var(--text); font-variant-numeric: tabular-nums; }
 label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }

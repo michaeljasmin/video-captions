@@ -64,7 +64,7 @@
     </div>
 
     <div class="panel-col">
-      <section class="card">
+      <section class="card" data-section="transcription">
         <h2>1. Transcription</h2>
         <div class="row">
           <label>Langue
@@ -89,7 +89,7 @@
         </details>
       </section>
 
-      <section class="card">
+      <section class="card" data-section="style">
         <div class="card-head">
           <h2>2. Style</h2>
           <div class="preset-row">
@@ -149,13 +149,13 @@
         <button id="resetStyle" class="ghost small">Style par défaut</button>
       </section>
 
-      <section class="card grow">
+      <section class="card grow" data-section="text">
         <h2>3. Texte <span id="capCount" class="muted"></span></h2>
         <p class="muted small-text">Clique sur un temps pour y aller. Corrige le texte directement. ⌘Z pour annuler.</p>
         <div id="captions" class="captions"><div class="empty">Lance la transcription pour voir le texte ici.</div></div>
       </section>
 
-      <section class="card">
+      <section class="card" data-section="export">
         <h2>4. Export</h2>
         <button id="exportBtn" class="primary" disabled>Exporter la vidéo</button>
         <div id="exportStatus" class="status"></div>

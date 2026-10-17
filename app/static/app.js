@@ -1149,9 +1149,31 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- Sections repliables ----------
+
+function applyCollapsed() {
+  const collapsed = new Set(state.settings.collapsed || []);
+  document.querySelectorAll(".card[data-section]").forEach((card) => {
+    card.classList.toggle("collapsed", collapsed.has(card.dataset.section));
+  });
+}
+
+document.querySelectorAll(".card[data-section] h2").forEach((h2) => {
+  h2.classList.add("toggle");
+  h2.title = "Cliquer pour replier ou déplier";
+  h2.addEventListener("click", () => {
+    const section = h2.closest(".card").dataset.section;
+    const collapsed = new Set(state.settings.collapsed || []);
+    collapsed.has(section) ? collapsed.delete(section) : collapsed.add(section);
+    state.settings.collapsed = [...collapsed];
+    applyCollapsed();
+    saveSettings();
+  });
+});
+
 // ---------- Démarrage ----------
 
 syncStyleInputs();
 requestAnimationFrame(previewLoop);
-loadSettings().then(renderProjects);
+loadSettings().then(() => { applyCollapsed(); renderProjects(); });
 api("/api/version").then((v) => { $("version").textContent = `Version ${v.version}`; }).catch(() => {});
