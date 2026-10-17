@@ -10,7 +10,7 @@ let appDir = (Bundle.main.object(forInfoDictionaryKey: "CaptionsAppDir") as? Str
 let logPath = appDir + "/data/server.log"
 let background = NSColor(red: 0.055, green: 0.063, blue: 0.075, alpha: 1)
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var webView: WKWebView!
     var server: Process?
@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         window.contentView = webView
         window.center()
         window.setFrameAutosaveName("CaptionsMain")
+        window.delegate = self
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
@@ -121,15 +122,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    // Le bouton rouge passe par la même vérification que ⌘Q (modifications non enregistrées, travail en cours).
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        NSApp.terminate(nil)
+        return false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !quitting, let data = try? Data(contentsOf: URL(string: "http://127.0.0.1:\(port)/api/busy")!),
-              String(decoding: data, as: UTF8.self).contains("true") else { return .terminateNow }
+        if quitting { return .terminateNow }
+        let js = "[window.hasUnsavedChanges ? window.hasUnsavedChanges() : false, window.unsavedProjectName ? window.unsavedProjectName() : '']"
+        webView.evaluateJavaScript(js) { result, _ in
+            let values = result as? [Any] ?? []
+            let dirty = values.first as? Bool ?? false
+            let name = values.count > 1 ? values[1] as? String ?? "" : ""
+            guard dirty else { return self.confirmBusyThenQuit() }
+
+            let alert = NSAlert()
+            alert.messageText = "Enregistrer les modifications apportées à « \(name) » ?"
+            alert.informativeText = "Elles seront perdues si tu ne les enregistres pas."
+            alert.addButton(withTitle: "Enregistrer")
+            alert.addButton(withTitle: "Annuler")
+            alert.addButton(withTitle: "Ne pas enregistrer")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                self.webView.callAsyncJavaScript("return await window.saveNow()", arguments: [:], in: nil, in: .page) { saved in
+                    if case .success(let ok) = saved, ok as? Bool == true {
+                        self.confirmBusyThenQuit()
+                    } else {
+                        NSApp.reply(toApplicationShouldTerminate: false)
+                    }
+                }
+            case .alertThirdButtonReturn:
+                self.confirmBusyThenQuit()
+            default:
+                NSApp.reply(toApplicationShouldTerminate: false)
+            }
+        }
+        return .terminateLater
+    }
+
+    func confirmBusyThenQuit() {
+        guard let data = try? Data(contentsOf: URL(string: "http://127.0.0.1:\(port)/api/busy")!),
+              String(decoding: data, as: UTF8.self).contains("true") else {
+            return NSApp.reply(toApplicationShouldTerminate: true)
+        }
         let alert = NSAlert()
         alert.messageText = "Une transcription ou un export est en cours."
         alert.informativeText = "Si tu quittes maintenant, il sera interrompu."
         alert.addButton(withTitle: "Continuer le travail")
         alert.addButton(withTitle: "Quitter quand même")
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        NSApp.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

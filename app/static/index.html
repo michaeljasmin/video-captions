@@ -8,22 +8,47 @@
 </head>
 <body>
   <header>
-    <h1>Captions</h1>
-    <span class="sub">Whisper large-v3 · 100 % local</span>
-    <button id="newVideo" class="ghost hidden">Nouvelle vidéo</button>
+    <div id="editorNav" class="nav hidden">
+      <button id="homeBtn" class="ghost icon" title="Mes vidéos">
+        <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+      </button>
+      <button id="undoBtn" class="ghost icon" title="Annuler (⌘Z)" disabled>
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button id="redoBtn" class="ghost icon" title="Rétablir (⌘⇧Z)" disabled>
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
+    </div>
+    <h1 id="title">Captions</h1>
+    <span id="saved" class="saved"></span>
+    <div class="header-actions">
+      <button id="saveBtn" class="primary inline hidden" title="Enregistrer (⌘S)" disabled>Enregistrer</button>
+      <button id="newVideo" class="primary inline">+ Nouvelle vidéo</button>
+    </div>
   </header>
 
-  <!-- Étape 1 : dépôt de la vidéo -->
-  <section id="drop" class="drop">
-    <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v,.mkv,.webm" hidden>
-    <div class="drop-inner">
-      <div class="drop-title">Glisse ta vidéo ici</div>
+  <!-- Fenêtre de confirmation (quitter sans enregistrer, supprimer…) -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="modalTitle"></h3>
+      <p id="modalText"></p>
+      <div id="modalButtons" class="modal-buttons"></div>
+    </div>
+  </div>
+  <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v,.mkv,.webm" hidden>
+
+  <!-- Accueil : brouillons -->
+  <section id="home" class="home">
+    <div id="drop" class="drop">
+      <div class="drop-title">Glisse une vidéo ici</div>
       <div class="drop-hint">ou <button id="pick" class="link">choisis un fichier</button> · MP4, MOV</div>
       <div id="uploadStatus" class="status"></div>
     </div>
+    <h2 id="projectsTitle" class="hidden">Mes vidéos</h2>
+    <div id="projects" class="projects"></div>
   </section>
 
-  <!-- Étape 2 : éditeur -->
+  <!-- Éditeur -->
   <main id="editor" class="hidden">
     <div class="stage-col">
       <div id="stage" class="stage">
@@ -46,21 +71,37 @@
             </select>
           </label>
         </div>
-        <label>Mots spéciaux <span class="muted">(noms, marques — aide Whisper à bien les écrire)</span>
+        <label>Mots spéciaux <span class="muted">(noms, marques · mémorisés pour toutes tes vidéos)</span>
           <input id="prompt" type="text" placeholder="ex. Burotic, Shopify, bureau assis-debout">
         </label>
         <button id="transcribeBtn" class="primary">Transcrire la vidéo</button>
         <div id="transcribeStatus" class="status"></div>
         <details id="rulesBox">
           <summary>Corrections automatiques <span id="rulesCount" class="muted"></span></summary>
-          <p class="muted small-text">Une règle par ligne. Appliquées après chaque transcription et mémorisées.</p>
+          <p class="muted small-text">Une règle par ligne. Appliquées après chaque transcription, mémorisées pour toutes tes vidéos.</p>
           <textarea id="rules" rows="3" placeholder="bureautique => Burotic&#10;assis debout => assis-debout"></textarea>
           <button id="applyRules" class="ghost small">Appliquer au texte actuel</button>
         </details>
       </section>
 
       <section class="card">
-        <h2>2. Style</h2>
+        <div class="card-head">
+          <h2>2. Style</h2>
+          <div class="preset-row">
+            <select id="presetSelect" title="Appliquer un preset"></select>
+            <button id="presetSave" class="ghost icon" title="Enregistrer ce style comme preset">
+              <svg viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
+            </button>
+            <button id="presetDelete" class="ghost icon hidden" title="Supprimer ce preset">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="presetForm" class="preset-form hidden">
+          <input id="presetName" type="text" placeholder="Nom du preset (ex. TikTok Burotic)" maxlength="40">
+          <button id="presetConfirm" class="small">Enregistrer</button>
+          <button id="presetCancel" class="ghost small">Annuler</button>
+        </div>
         <div class="grid">
           <label>Police
             <select id="s-font">
@@ -105,7 +146,7 @@
 
       <section class="card grow">
         <h2>3. Texte <span id="capCount" class="muted"></span></h2>
-        <p class="muted small-text">Clique sur un temps pour y aller. Corrige le texte directement.</p>
+        <p class="muted small-text">Clique sur un temps pour y aller. Corrige le texte directement. ⌘Z pour annuler.</p>
         <div id="captions" class="captions"><div class="empty">Lance la transcription pour voir le texte ici.</div></div>
       </section>
 

@@ -132,8 +132,9 @@ def upload(file: UploadFile = File(...)):
     except Exception:
         shutil.rmtree(d)
         raise
-    meta = {"id": vid, "name": file.filename, "ext": ext, **info}
+    meta = {"id": vid, "name": file.filename, "ext": ext, "created": time.time(), **info}
     (d / "meta.json").write_text(json.dumps(meta))
+    make_thumb(d, meta)
     return meta
 
 
@@ -141,6 +142,102 @@ def upload(file: UploadFile = File(...)):
 def video(vid: str):
     d = job_dir(vid)
     return FileResponse(d / f"source{read_meta(d)['ext']}")
+
+
+# ---------- Brouillons ----------
+
+def make_thumb(d: Path, meta: dict) -> Path:
+    thumb = d / "thumb.jpg"
+    if not thumb.exists():
+        t = min(1.0, meta["duration"] / 2)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t:.2f}", "-i", str(d / f"source{meta['ext']}"),
+                        "-frames:v", "1", "-vf", "scale=360:-2", "-q:v", "4", str(thumb)])
+    return thumb
+
+
+def read_json(path: Path, default):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def write_json(path: Path, data):
+    tmp = path.with_suffix(".tmp")  # écriture atomique : jamais de fichier à moitié écrit
+    tmp.write_text(json.dumps(data, ensure_ascii=False))
+    tmp.replace(path)
+
+
+@app.get("/api/projects")
+def list_projects():
+    out = []
+    for d in DATA.iterdir():
+        if not (re.fullmatch(r"[a-f0-9]{12}", d.name) and (d / "meta.json").exists()):
+            continue
+        meta = read_meta(d)
+        project = read_json(d / "project.json", {})
+        out.append({
+            "id": d.name,
+            "name": project.get("name") or Path(meta.get("name") or "Vidéo").stem,
+            "duration": meta["duration"],
+            "width": meta["width"],
+            "height": meta["height"],
+            "updated": project.get("updated") or meta.get("created") or d.stat().st_mtime,
+            "captions": len(project.get("captions") or []),
+            "transcribed": (d / "words.json").exists(),
+            "size": sum(f.stat().st_size for f in d.rglob("*") if f.is_file()),
+        })
+    return sorted(out, key=lambda p: p["updated"], reverse=True)
+
+
+@app.get("/api/projects/{vid}")
+def get_project(vid: str):
+    d = job_dir(vid)
+    return {"meta": read_meta(d), "project": read_json(d / "project.json", {}),
+            "words": read_json(d / "words.json", [])}
+
+
+@app.put("/api/projects/{vid}")
+async def save_project(vid: str, request: Request):
+    d = job_dir(vid)
+    project = await request.json()
+    project["updated"] = time.time()
+    write_json(d / "project.json", project)
+    return {"updated": project["updated"]}
+
+
+@app.delete("/api/projects/{vid}")
+def delete_project(vid: str):
+    d = job_dir(vid)
+    if any(jobs.get(f"{k}-{vid}", {}).get("status") in {"queued", "running"} for k in "te"):
+        raise HTTPException(409, "Une transcription ou un export est en cours pour cette vidéo")
+    shutil.rmtree(d)
+    jobs.pop(f"t-{vid}", None)
+    jobs.pop(f"e-{vid}", None)
+    return {"deleted": vid}
+
+
+@app.get("/api/projects/{vid}/thumb")
+def project_thumb(vid: str):
+    d = job_dir(vid)
+    return FileResponse(make_thumb(d, read_meta(d)))
+
+
+# ---------- Réglages de l'app (presets de style, vocabulaire) ----------
+
+SETTINGS = DATA / "settings.json"
+
+
+@app.get("/api/settings")
+def get_settings():
+    return read_json(SETTINGS, {})
+
+
+@app.put("/api/settings")
+async def save_settings(request: Request):
+    settings = await request.json()
+    write_json(SETTINGS, settings)
+    return {"ok": True}
 
 
 # ---------- Transcription ----------
