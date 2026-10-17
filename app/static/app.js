@@ -71,8 +71,9 @@ function fmtAgo(seconds) {
   return new Date(seconds * 1000).toLocaleDateString("fr-CA", { day: "numeric", month: "short" });
 }
 
+// Nom affiché : celui choisi par l'utilisateur, sinon le nom du fichier sans extension.
 function projectName(meta) {
-  return (meta.name || "Vidéo").replace(/\.[^.]+$/, "");
+  return meta.displayName || (meta.name || "Vidéo").replace(/\.[^.]+$/, "");
 }
 
 // Fenêtre de choix : renvoie la valeur du bouton cliqué (Échap = premier bouton).
@@ -525,6 +526,8 @@ function showView(view) {
   $("saveBtn").classList.toggle("hidden", !editor);
   $("newVideo").classList.toggle("hidden", editor);
   $("title").textContent = editor ? projectName(state.meta) : "Captions";
+  $("title").classList.toggle("renamable", editor);
+  $("title").title = editor ? "Cliquer pour renommer" : "";
   $("version").classList.toggle("hidden", editor);
   if (!editor) $("saved").textContent = "";
 }
@@ -601,6 +604,50 @@ async function renderProjects() {
   }
 }
 
+// ---------- Renommer (clic sur le titre) ----------
+
+const titleEl = $("title");
+
+titleEl.addEventListener("click", () => {
+  if (state.view !== "editor" || titleEl.isContentEditable) return;
+  titleEl.contentEditable = "plaintext-only";
+  titleEl.classList.add("editing");
+  titleEl.focus();
+  const range = document.createRange();
+  range.selectNodeContents(titleEl);
+  getSelection().removeAllRanges();
+  getSelection().addRange(range);
+});
+
+async function finishRename(commit) {
+  if (!titleEl.isContentEditable) return;
+  titleEl.contentEditable = "false";
+  titleEl.classList.remove("editing");
+  getSelection().removeAllRanges();
+  const name = titleEl.textContent.replace(/\s+/g, " ").trim();
+  const previous = projectName(state.meta);
+  if (!commit || !name || name === previous) {
+    titleEl.textContent = previous;
+    return;
+  }
+  try {
+    const res = await putJSON(`/api/projects/${state.meta.id}/name`, { name });
+    state.meta.displayName = res.name;
+    titleEl.textContent = res.name;
+  } catch (e) {
+    titleEl.textContent = previous;
+    await modal({ title: "Renommage impossible", text: e.message, buttons: [{ label: "OK", value: "ok" }] });
+  }
+}
+
+titleEl.addEventListener("keydown", (e) => {
+  if (!titleEl.isContentEditable) return;
+  e.stopPropagation(); // pas de ⌘Z / espace de l'éditeur pendant la saisie du nom
+  if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
+  if (e.key === "Escape") { e.preventDefault(); finishRename(false); }
+});
+titleEl.addEventListener("blur", () => finishRename(true));
+
 // ---------- Upload ----------
 
 function uploadFile(file) {
@@ -655,7 +702,7 @@ async function openProject(id) {
     return;
   }
   const { meta, project, words } = data;
-  state.meta = meta;
+  state.meta = { ...meta, displayName: project.name || null };
   state.words = words;
   state.style = { ...DEFAULT_STYLE, ...(project.style || state.settings.lastStyle || {}) };
   $("language").value = project.language || "fr";

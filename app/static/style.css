@@ -35,7 +35,10 @@ h1 { margin: 0; font-size: 18px; font-weight: 700; }
 h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
 .sub, .muted { color: var(--muted); font-weight: 400; }
 .small-text { font-size: 12px; margin: -6px 0 8px; }
-#title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+#title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; padding: 2px 6px; margin-left: -6px; border-radius: 6px; border: 1px solid transparent; }
+#title.renamable { cursor: text; }
+#title.renamable:hover { background: var(--panel); }
+#title.editing { background: var(--bg); border-color: var(--accent); outline: none; text-overflow: clip; }
 .nav { display: flex; gap: 4px; }
 .header-actions { margin-left: auto; display: flex; gap: 8px; }
 .saved { color: var(--muted); font-size: 12px; }

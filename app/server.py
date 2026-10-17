@@ -204,7 +204,7 @@ def list_projects():
         project = read_json(d / "project.json", {})
         out.append({
             "id": d.name,
-            "name": project.get("name") or Path(meta.get("name") or "Vidéo").stem,
+            "name": display_name(d, meta),
             "duration": meta["duration"],
             "width": meta["width"],
             "height": meta["height"],
@@ -226,10 +226,27 @@ def get_project(vid: str):
 @app.put("/api/projects/{vid}")
 async def save_project(vid: str, request: Request):
     d = job_dir(vid)
-    project = await request.json()
+    project = read_json(d / "project.json", {})  # garde les champs non envoyés (ex. le nom)
+    project.update(await request.json())
     project["updated"] = time.time()
     write_json(d / "project.json", project)
     return {"updated": project["updated"]}
+
+
+@app.put("/api/projects/{vid}/name")
+async def rename_project(vid: str, request: Request):
+    d = job_dir(vid)
+    name = str((await request.json()).get("name", "")).strip()[:120]
+    if not name:
+        raise HTTPException(400, "Le nom ne peut pas être vide")
+    project = read_json(d / "project.json", {})
+    project["name"] = name
+    write_json(d / "project.json", project)
+    return {"name": name}
+
+
+def display_name(d: Path, meta: dict) -> str:
+    return read_json(d / "project.json", {}).get("name") or Path(meta.get("name") or "Vidéo").stem
 
 
 @app.delete("/api/projects/{vid}")
@@ -394,7 +411,8 @@ def run_export(vid: str, captions: list[dict]):
         stderr = proc.stderr.read()
         if proc.wait() != 0:
             raise RuntimeError(stderr.strip().splitlines()[-1] if stderr.strip() else "ffmpeg a échoué")
-        name = Path(meta["name"] or "video").stem + "_captions" + out_ext
+        safe = re.sub(r'[/:\\]', "-", display_name(d, meta))  # caractères interdits dans un nom de fichier
+        name = safe + "_captions" + out_ext
         job.update(status="done", progress=1.0, file=out.name, download_name=name,
                    size=out.stat().st_size, path=str(out))
     except Exception as e:
