@@ -10,16 +10,15 @@ Sous-titres automatiques pour vidéos TikTok / Instagram, 100 % en local sur le 
 
 ## Installer (une seule fois)
 
-Ouvre l'app **Terminal** et colle cette ligne (une seule commande) :
+Ouvre l'app **Terminal** et colle :
 
 ```bash
-[ -x /Library/Developer/CommandLineTools/usr/bin/git ] || xcode-select -p >/dev/null 2>&1 || { xcode-select --install; echo "→ Clique « Installer » dans la fenêtre qui s'ouvre, puis patiente (5 à 10 min, Ctrl+C pour arrêter)…"; until [ -x /Library/Developer/CommandLineTools/usr/bin/git ]; do sleep 5; done; }; git clone https://github.com/michaeljasmin/video-captions.git ~/Captions && open ~/Captions/Installer.command
+git clone https://github.com/michaeljasmin/video-captions.git ~/Captions && open ~/Captions/Installer.command
 ```
 
 Ce qui va se passer :
 
-1. Si le Mac n'a pas encore les outils développeur d'Apple, une fenêtre propose de les installer :
-   clique **Installer** et attends. La commande reprend toute seule une fois l'installation finie.
+1. Si le Mac propose d'installer les « outils de ligne de commande », accepte, attends la fin, puis recolle la commande.
 2. Le code est téléchargé dans le dossier `Captions` de ton dossier personnel (ne le déplace pas), et l'installateur s'ouvre.
 3. Il installe Homebrew si besoin (ton mot de passe Mac est demandé, rien ne s'affiche quand tu tapes, c'est normal),
    puis ffmpeg, Python, le modèle Whisper (~3 Go) et l'app **Captions** dans le dossier Applications.
