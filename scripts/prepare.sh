@@ -59,8 +59,8 @@ main() {
       local behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
       [[ "$behind" -gt 0 ]] || return 0
       echo "UPDATE"
-      git rev-list --count HEAD
-      git rev-list --count @{u}
+      echo "1.$(git rev-list --count HEAD)"   # même format que l'app : 1.N
+      echo "1.$(git rev-list --count @{u})"
       git log --format='%s' HEAD..@{u} | head -8
       ;;
     update)

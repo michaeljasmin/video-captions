@@ -19,9 +19,11 @@
         <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
       </button>
     </div>
-    <h1 id="title">Captions</h1>
-    <span id="version" class="saved"></span>
-    <span id="saved" class="saved"></span>
+    <div class="title-group">
+      <h1 id="title">Captions</h1>
+      <span id="version" class="saved"></span>
+      <span id="saved" class="saved"></span>
+    </div>
     <div class="header-actions">
       <button id="saveBtn" class="primary inline hidden" title="Enregistrer (⌘S)" disabled>Enregistrer</button>
       <button id="newVideo" class="primary inline">+ Nouvelle vidéo</button>
@@ -41,9 +43,11 @@
   <!-- Accueil : brouillons -->
   <section id="home" class="home">
     <div id="drop" class="drop">
-      <div class="drop-title">Glisse une vidéo ici</div>
-      <div class="drop-hint">ou <button id="pick" class="link">choisis un fichier</button> · MP4, MOV</div>
-      <div id="uploadStatus" class="status"></div>
+      <div class="drop-inner">
+        <div class="drop-title">Glisse une vidéo ici</div>
+        <div class="drop-hint">ou <button id="pick" class="link">choisis un fichier</button> · MP4, MOV</div>
+        <div id="uploadStatus" class="status"></div>
+      </div>
     </div>
     <h2 id="projectsTitle" class="hidden">Mes vidéos</h2>
     <div id="projects" class="projects"></div>

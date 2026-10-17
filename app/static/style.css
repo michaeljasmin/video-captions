@@ -40,6 +40,8 @@ h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
 #title.renamable:hover { background: var(--panel); }
 #title.editing { background: var(--bg); border-color: var(--accent); outline: none; text-overflow: clip; }
 .nav { display: flex; gap: 4px; }
+/* Titre, version et état d'enregistrement sur la même ligne de base que le titre. */
+.title-group { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .header-actions { margin-left: auto; display: flex; gap: 8px; }
 .saved { color: var(--muted); font-size: 12px; }
 .saved.dirty { color: #e5b94a; }
@@ -71,6 +73,7 @@ h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
 
 /* Dépôt */
 .drop.compact { height: 120px; margin: 0; max-width: none; }
+.drop .status:empty { display: none; } /* sinon la ligne vide décentre le texte */
 .drop {
   margin: 40px auto; max-width: 640px; height: 320px;
   border: 2px dashed var(--line); border-radius: 16px;

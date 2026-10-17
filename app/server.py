@@ -73,10 +73,11 @@ async def no_cache_for_app_files(request: Request, call_next):
 
 
 def app_version() -> str:
-    """Numéro de version = nombre de commits (augmente à chaque mise à jour publiée)."""
+    """Version 1.N, N = nombre de commits (augmente à chaque mise à jour publiée)."""
     try:
-        return subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=ROOT,
-                              capture_output=True, text=True, check=True).stdout.strip()
+        count = subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=ROOT,
+                               capture_output=True, text=True, check=True).stdout.strip()
+        return f"1.{count}"
     except Exception:
         return "dev"
 
