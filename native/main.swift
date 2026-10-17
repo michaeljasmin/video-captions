@@ -176,12 +176,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
+        confirmUnsavedChanges { proceed in
+            proceed ? self.confirmBusyThenQuit() : self.cancelQuit()
+        }
+        return .terminateLater
+    }
+
+    /// Modifications non enregistrées dans la page ? Propose Enregistrer / Annuler / Ne pas enregistrer.
+    /// `done(true)` : on peut continuer (enregistré, rien à enregistrer, ou abandon choisi).
+    func confirmUnsavedChanges(_ done: @escaping (Bool) -> Void) {
         let js = "[window.hasUnsavedChanges ? window.hasUnsavedChanges() : false, window.unsavedProjectName ? window.unsavedProjectName() : '']"
         webView.evaluateJavaScript(js) { result, _ in
             let values = result as? [Any] ?? []
             let dirty = values.first as? Bool ?? false
             let name = values.count > 1 ? values[1] as? String ?? "" : ""
-            guard dirty else { return self.confirmBusyThenQuit() }
+            guard dirty else { return done(true) }
 
             let alert = NSAlert()
             alert.messageText = "Enregistrer les modifications apportées à « \(name) » ?"
@@ -192,19 +201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
             switch alert.runModal() {
             case .alertFirstButtonReturn:
                 self.webView.callAsyncJavaScript("return await window.saveNow()", arguments: [:], in: nil, in: .page) { saved in
-                    if case .success(let ok) = saved, ok as? Bool == true {
-                        self.confirmBusyThenQuit()
-                    } else {
-                        self.cancelQuit()
-                    }
+                    if case .success(let ok) = saved, ok as? Bool == true { done(true) } else { done(false) }
                 }
             case .alertThirdButtonReturn:
-                self.confirmBusyThenQuit()
+                done(true)
             default:
-                self.cancelQuit()
+                done(false)
             }
         }
-        return .terminateLater
     }
 
     func cancelQuit() {
@@ -371,7 +375,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
         NSApp.mainMenu = main
     }
 
-    @objc func reloadPage() { webView.reload() }
+    // WKWebView ignore « beforeunload » : sans cette question, recharger perdrait les modifications.
+    @objc func reloadPage() {
+        confirmUnsavedChanges { proceed in
+            if proceed { self.webView.reload() }
+        }
+    }
 
     /// Menu Captions › Rechercher des mises à jour…
     @objc func checkForUpdates() {

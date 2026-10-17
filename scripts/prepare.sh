@@ -9,6 +9,13 @@
 # donc une mise à jour de ce fichier par « git pull » ne casse pas l'exécution en cours.
 APP_DIR="${0:A:h:h}"
 
+# Arrête un processus et tous ses descendants (git fetch lance des sous-processus réseau).
+kill_tree() {
+  local child
+  for child in $(pgrep -P $1); do kill_tree $child; done
+  kill $1 2>/dev/null
+}
+
 git_quiet() {
   GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 "$@"
 }
@@ -37,7 +44,18 @@ main() {
 
   case "$1" in
     check)
-      [[ -d .git ]] && git_quiet fetch --quiet >>"$LOG" 2>&1 || return 0  # hors ligne : rien à proposer
+      [[ -d .git ]] || return 0
+      # 8 s maximum : sur un réseau bloqué (portail Wi-Fi…), git attendrait plus d'une minute et l'app
+      # resterait figée sur « Recherche de mises à jour… ». Hors ligne : rien à proposer.
+      git_quiet fetch --quiet >>"$LOG" 2>&1 &
+      local fetch_pid=$!
+      for _ in {1..16}; do kill -0 $fetch_pid 2>/dev/null || break; sleep 0.5; done
+      if kill -0 $fetch_pid 2>/dev/null; then
+        kill_tree $fetch_pid
+        echo "$(date) recherche de mise à jour abandonnée (réseau trop lent)" >>"$LOG"
+        return 0
+      fi
+      wait $fetch_pid || return 0
       local behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
       [[ "$behind" -gt 0 ]] || return 0
       echo "UPDATE"

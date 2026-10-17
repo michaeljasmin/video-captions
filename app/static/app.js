@@ -666,9 +666,14 @@ function uploadFile(file) {
     setStatus("uploadStatus", "");
     const meta = JSON.parse(xhr.responseText);
     // Nouveau projet : dernier style utilisé, enregistré tout de suite.
-    await putJSON(`/api/projects/${meta.id}`, {
-      captions: [], style: { ...DEFAULT_STYLE, ...(state.settings.lastStyle || {}) }, language: "fr",
-    });
+    try {
+      await putJSON(`/api/projects/${meta.id}`, {
+        captions: [], style: { ...DEFAULT_STYLE, ...(state.settings.lastStyle || {}) }, language: "fr",
+      });
+    } catch (e) {
+      setStatus("uploadStatus", e.message, "error");
+      return;
+    }
     openProject(meta.id);
   };
   xhr.onerror = () => setStatus("uploadStatus", "Le moteur de Captions ne répond pas. Relance l'app.", "error");
@@ -769,10 +774,37 @@ $("transcribeBtn").addEventListener("click", async () => {
   pollTranscription(id);
 });
 
-async function pollTranscription(id) {
-  const job = await api(`/api/transcribe/${id}`).catch(() => null);
+// Une seule boucle de suivi par vidéo, même si on la quitte et la rouvre pendant la transcription
+// (sinon le résultat serait appliqué deux fois, avec une étape d'annulation en double).
+const followedTranscriptions = new Set();
+
+function pollTranscription(id) {
+  if (followedTranscriptions.has(id)) return;
+  followedTranscriptions.add(id);
+  followTranscription(id).finally(() => followedTranscriptions.delete(id));
+}
+
+async function followTranscription(id) {
+  let failures = 0;
+  for (;;) {
+    const job = await api(`/api/transcribe/${id}`).catch(() => null);
+    if (job) {
+      failures = 0;
+      if (await handleTranscriptionStatus(id, job).catch(() => true)) return;
+    } else if (++failures >= 10) { // un raté passager ne doit pas arrêter le suivi
+      if (state.meta?.id === id) {
+        setStatus("transcribeStatus", "Le moteur de Captions ne répond plus. Relance l'app.", "error");
+        $("transcribeBtn").disabled = false;
+      }
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+// Renvoie true quand la transcription est terminée (réussie ou non).
+async function handleTranscriptionStatus(id, job) {
   const here = state.meta?.id === id;
-  if (!job) return;
 
   if (job.status === "done") {
     if (here) {
@@ -785,26 +817,29 @@ async function pollTranscription(id) {
       $("transcribeBtn").textContent = "Relancer la transcription";
     } else {
       // Terminée pendant qu'on était ailleurs : on enregistre le résultat dans le projet.
-      const { project } = await api(`/api/projects/${id}`);
-      const style = { ...DEFAULT_STYLE, ...(project.style || state.settings.lastStyle || {}) };
-      const captions = chunkWords(applyRulesToWords(job.words), style.words);
-      await putJSON(`/api/projects/${id}`, { ...project, captions, style });
+      // (Si ça échoue, les mots restent sur le disque : les captions seront refaites à l'ouverture.)
+      try {
+        const { project } = await api(`/api/projects/${id}`);
+        const style = { ...DEFAULT_STYLE, ...(project.style || state.settings.lastStyle || {}) };
+        const captions = chunkWords(applyRulesToWords(job.words), style.words);
+        await putJSON(`/api/projects/${id}`, { ...project, captions, style });
+      } catch {}
       if (state.view === "home") renderProjects();
     }
-    return;
+    return true;
   }
   if (job.status === "error") {
     if (here) {
       setStatus("transcribeStatus", "Erreur : " + job.error, "error");
       $("transcribeBtn").disabled = false;
     }
-    return;
+    return true;
   }
   if (here) {
     const hint = job.elapsed < 20 ? " (chargement du modèle)" : "";
     setStatus("transcribeStatus", `Transcription en cours… ${Math.round(job.elapsed)} s${hint}`);
   }
-  setTimeout(() => pollTranscription(id), 1000);
+  return false;
 }
 
 // ---------- Corrections automatiques ----------
@@ -998,21 +1033,37 @@ $("exportBtn").addEventListener("click", async () => {
   setStatus("exportStatus", "Préparation des captions…");
   await ensureFont();
 
+  // Toutes les captions forment une seule piste transparente posée sur une même zone (la plus petite
+  // qui les contient toutes) : une image par caption à la taille de cette zone, plus une image vide.
   const { width: W, height: H } = state.meta;
   const measure = document.createElement("canvas").getContext("2d");
-  const form = new FormData();
-  const items = [];
+  const layouts = [];
   for (const c of state.captions) {
     const text = displayText(c.text);
-    if (!text) continue;
-    const layout = layoutCaption(measure, text, W, H);
+    if (text) layouts.push({ c, layout: layoutCaption(measure, text, W, H) });
+  }
+  const form = new FormData();
+  const items = [];
+  if (layouts.length) {
+    const x0 = Math.max(0, Math.min(...layouts.map((l) => l.layout.box.x)));
+    const y0 = Math.max(0, Math.min(...layouts.map((l) => l.layout.box.y)));
+    const x1 = Math.min(W, Math.max(...layouts.map((l) => l.layout.box.x + l.layout.box.w)));
+    const y1 = Math.min(H, Math.max(...layouts.map((l) => l.layout.box.y + l.layout.box.h)));
+    const band = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     const canvas = document.createElement("canvas");
-    canvas.width = layout.box.w;
-    canvas.height = layout.box.h;
-    drawCaption(canvas.getContext("2d"), layout, layout.box.x, layout.box.y);
-    const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
-    form.append(`png${items.length}`, blob, `${items.length}.png`);
-    items.push({ start: c.start, end: c.end, x: layout.box.x, y: layout.box.y });
+    canvas.width = band.w;
+    canvas.height = band.h;
+    const ctx = canvas.getContext("2d");
+    const png = () => new Promise((r) => canvas.toBlob(r, "image/png"));
+
+    form.append("blank", await png(), "blank.png");
+    for (const { c, layout } of layouts) {
+      ctx.clearRect(0, 0, band.w, band.h);
+      drawCaption(ctx, layout, band.x, band.y);
+      form.append(`png${items.length}`, await png(), `${items.length}.png`);
+      items.push({ start: c.start, end: c.end });
+    }
+    form.append("band", JSON.stringify(band));
   }
   form.append("captions", JSON.stringify(items));
 

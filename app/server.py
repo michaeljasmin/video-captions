@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -15,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+DATA = Path(os.environ.get("CAPTIONS_DATA", ROOT / "data"))  # surchargé par les tests
 STATIC = Path(__file__).resolve().parent / "static"
 DATA.mkdir(exist_ok=True)
 
@@ -23,7 +24,15 @@ WHISPER_MODEL = "mlx-community/whisper-large-v3-mlx"
 
 app = FastAPI()
 jobs: dict[str, dict] = {}  # état en mémoire des transcriptions / exports
-whisper_lock = threading.Lock()  # un seul modèle en mémoire à la fois
+# MLX lie ses flux GPU au fil d'exécution qui les crée : toutes les transcriptions passent par ce
+# seul fil, toujours le même (et une seule à la fois, un seul modèle en mémoire).
+whisper_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="whisper")
+
+
+def last_line(text: str) -> str:
+    """Les erreurs ffmpeg font des dizaines de lignes : seule la dernière dit ce qui s'est passé."""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else "Erreur inconnue"
 
 
 def busy() -> bool:
@@ -155,9 +164,12 @@ def upload(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, f, length=1024 * 1024)
     try:
         info = probe(src)
-    except Exception:
+    except HTTPException:
         shutil.rmtree(d)
         raise
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError):
+        shutil.rmtree(d)
+        raise HTTPException(400, "Fichier vidéo illisible : il est peut-être incomplet ou abîmé.")
     meta = {"id": vid, "name": file.filename, "ext": ext, "created": time.time(), **info}
     (d / "meta.json").write_text(json.dumps(meta))
     make_thumb(d, meta)
@@ -291,17 +303,16 @@ def run_transcription(vid: str, language: str | None, prompt: str):
     try:
         import mlx_whisper
 
-        with whisper_lock:
-            job["status"] = "running"
-            result = mlx_whisper.transcribe(
-                str(d / f"source{read_meta(d)['ext']}"),
-                path_or_hf_repo=WHISPER_MODEL,
-                language=language,
-                word_timestamps=True,
-                # Le prompt n'est conservé d'une fenêtre de 30 s à l'autre que si on garde le contexte précédent.
-                initial_prompt=f"Vocabulaire : {prompt}." if prompt else None,
-                hallucination_silence_threshold=2.0,
-            )
+        job["status"] = "running"
+        result = mlx_whisper.transcribe(
+            str(d / f"source{read_meta(d)['ext']}"),
+            path_or_hf_repo=WHISPER_MODEL,
+            language=language,
+            word_timestamps=True,
+            # Le prompt n'est conservé d'une fenêtre de 30 s à l'autre que si on garde le contexte précédent.
+            initial_prompt=f"Vocabulaire : {prompt}." if prompt else None,
+            hallucination_silence_threshold=2.0,
+        )
         words = []
         for seg_index, seg in enumerate(result["segments"]):
             for w in seg.get("words", []):
@@ -322,19 +333,21 @@ def run_transcription(vid: str, language: str | None, prompt: str):
                               "end": round(w["end"], 3), "seg": seg_index})
         (d / "words.json").write_text(json.dumps(words, ensure_ascii=False))
         job.update(status="done", words=words, language=result.get("language"))
-    except Exception as e:  # remonté tel quel à l'interface
-        job.update(status="error", error=str(e))
+    except Exception as e:  # remonté à l'interface
+        job.update(status="error", error=last_line(str(e)))
 
 
 @app.post("/api/transcribe/{vid}")
 def transcribe(vid: str, language: str = Form("fr"), prompt: str = Form("")):
-    job_dir(vid)
+    d = job_dir(vid)
+    if not read_meta(d).get("audio_codec"):
+        raise HTTPException(400, "Cette vidéo n'a pas de son : il n'y a rien à transcrire.")
     key = f"t-{vid}"
     if jobs.get(key, {}).get("status") in {"queued", "running"}:
         return jobs[key]
     jobs[key] = {"status": "queued", "started": time.time()}
     lang = None if language == "auto" else language
-    threading.Thread(target=run_transcription, args=(vid, lang, prompt.strip()), daemon=True).start()
+    whisper_worker.submit(run_transcription, vid, lang, prompt.strip())
     return jobs[key]
 
 
@@ -367,7 +380,26 @@ def encoder_args(meta: dict) -> tuple[list[str], str]:
     return args, overlay_fmt
 
 
-def run_export(vid: str, captions: list[dict]):
+def write_caption_track(cap_dir: Path, captions: list[dict]) -> Path:
+    """Liste ffconcat : chaque caption s'affiche de start à end, une image vide comble les silences.
+    Les captions forment ainsi une seule piste, quel que soit leur nombre (une entrée ffmpeg par
+    caption bloquait au-delà de quelques centaines : fichiers et fils d'exécution épuisés)."""
+    lines, t = ["ffconcat version 1.0"], 0.0
+    for i, c in sorted(enumerate(captions), key=lambda ic: ic[1]["start"]):
+        start, end = max(float(c["start"]), t), float(c["end"])
+        if end - start < 0.001:  # vide ou recouverte par la précédente
+            continue
+        if start - t > 0.0005:
+            lines += ["file blank.png", f"duration {start - t:.6f}"]
+        lines += [f"file {i}.png", f"duration {end - start:.6f}"]
+        t = end
+    lines.append("file blank.png")  # sans entrée finale, ffconcat ignorerait la durée de la dernière
+    track = cap_dir / "track.ffconcat"
+    track.write_text("\n".join(lines) + "\n")
+    return track
+
+
+def run_export(vid: str, captions: list[dict], band: dict | None):
     job = jobs[f"e-{vid}"]
     d = DATA / vid
     meta = read_meta(d)
@@ -376,20 +408,13 @@ def run_export(vid: str, captions: list[dict]):
     out = d / f"export{out_ext}"
     enc, overlay_fmt = encoder_args(meta)
 
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", "-progress", "pipe:1", "-i", str(src)]
-    for i in range(len(captions)):
-        cmd += ["-i", str(d / "captions" / f"{i}.png")]
-
-    parts, prev = [], "[0:v]"
-    for i, c in enumerate(captions):
-        label = f"[v{i + 1}]"
-        parts.append(
-            f"{prev}[{i + 1}:v]overlay=x={int(c['x'])}:y={int(c['y'])}:format={overlay_fmt}"
-            f":enable='gte(t,{c['start']:.3f})*lt(t,{c['end']:.3f})'{label}"
-        )
-        prev = label
-    if parts:
-        cmd += ["-filter_complex", ";".join(parts), "-map", prev]
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1", "-i", str(src)]
+    if captions and band:
+        track = write_caption_track(d / "captions", captions)
+        cmd += ["-f", "concat", "-i", str(track),
+                "-filter_complex",
+                f"[0:v][1:v]overlay=x={int(band['x'])}:y={int(band['y'])}:format={overlay_fmt}:eof_action=pass[v]",
+                "-map", "[v]"]
     else:
         cmd += ["-map", "0:v:0"]
 
@@ -401,22 +426,26 @@ def run_export(vid: str, captions: list[dict]):
                           "-movflags", "+faststart", str(out)]
 
     total_us = max(meta["duration"], 0.1) * 1_000_000
+    log_path = d / "export.log"
     try:
         job["status"] = "running"
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        job["proc"] = proc
-        for line in proc.stdout:
-            if line.startswith("out_time_us=") and line.strip()[12:].isdigit():
-                job["progress"] = min(0.99, int(line.strip()[12:]) / total_us)
-        stderr = proc.stderr.read()
-        if proc.wait() != 0:
-            raise RuntimeError(stderr.strip().splitlines()[-1] if stderr.strip() else "ffmpeg a échoué")
+        # Les messages vont dans un fichier : un tuyau non lu pendant l'export finit par se remplir
+        # et bloque ffmpeg pour toujours (vu au-delà de ~500 captions).
+        with open(log_path, "w") as log:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=log, text=True)
+            job["proc"] = proc
+            for line in proc.stdout:
+                if line.startswith("out_time_us=") and line.strip()[12:].isdigit():
+                    job["progress"] = min(0.99, int(line.strip()[12:]) / total_us)
+            code = proc.wait()
+        if code != 0:
+            raise RuntimeError(last_line(log_path.read_text(errors="replace")) if code > 0 else "Export interrompu")
         safe = re.sub(r'[/:\\]', "-", display_name(d, meta))  # caractères interdits dans un nom de fichier
         name = safe + "_captions" + out_ext
         job.update(status="done", progress=1.0, file=out.name, download_name=name,
                    size=out.stat().st_size, path=str(out))
     except Exception as e:
-        job.update(status="error", error=str(e))
+        job.update(status="error", error=last_line(str(e)))
     finally:
         job.pop("proc", None)
 
@@ -428,16 +457,23 @@ async def export(vid: str, request: Request):
     if jobs.get(key, {}).get("status") in {"queued", "running"}:
         raise HTTPException(409, "Un export est déjà en cours")
 
-    form = await request.form(max_files=5000)
+    # captions : [{start, end}] ; band : zone {x, y} où se pose la piste ; png{i} : image de chaque
+    # caption à la taille de la zone ; blank : image transparente pour les silences.
+    form = await request.form(max_files=20000)
     captions = json.loads(form["captions"])
+    band = json.loads(form["band"]) if form.get("band") else None
+    if captions and not (isinstance(band, dict) and {"x", "y"} <= band.keys() and "blank" in form):
+        raise HTTPException(400, "Export incomplet : zone ou image vide manquante")
     cap_dir = d / "captions"
     shutil.rmtree(cap_dir, ignore_errors=True)
     cap_dir.mkdir()
     for i in range(len(captions)):
         (cap_dir / f"{i}.png").write_bytes(await form[f"png{i}"].read())
+    if captions:
+        (cap_dir / "blank.png").write_bytes(await form["blank"].read())
 
     jobs[key] = {"status": "queued", "progress": 0.0, "started": time.time()}
-    threading.Thread(target=run_export, args=(vid, captions), daemon=True).start()
+    threading.Thread(target=run_export, args=(vid, captions, band), daemon=True).start()
     return {"status": "queued"}
 
 

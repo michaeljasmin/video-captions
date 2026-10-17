@@ -22,8 +22,9 @@ echo "OK : $(ffmpeg -version | head -1)"
 
 say_step "3/5 · Python et dépendances"
 PY=""
+# Python 3.10 à 3.13 seulement : les versions plus récentes n'ont pas toujours les paquets de MLX et numba.
 for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
-  if command -v $candidate >/dev/null 2>&1 && $candidate -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+  if command -v $candidate >/dev/null 2>&1 && $candidate -c 'import sys; sys.exit(not ((3, 10) <= sys.version_info[:2] <= (3, 13)))' 2>/dev/null; then
     PY=$(command -v $candidate); break
   fi
 done
