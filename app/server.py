@@ -54,6 +54,32 @@ def on_shutdown():
     stop_ffmpeg()
 
 
+@app.middleware("http")
+async def no_cache_for_app_files(request: Request, call_next):
+    """La page, le JS et le CSS changent à chaque mise à jour : jamais de copie périmée en cache."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+def app_version() -> str:
+    """Numéro de version = nombre de commits (augmente à chaque mise à jour publiée)."""
+    try:
+        return subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=ROOT,
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        return "dev"
+
+
+VERSION = app_version()
+
+
+@app.get("/api/version")
+def version():
+    return {"version": VERSION}
+
+
 @app.get("/api/busy")
 def is_busy():
     return {"busy": busy()}

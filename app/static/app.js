@@ -525,6 +525,7 @@ function showView(view) {
   $("saveBtn").classList.toggle("hidden", !editor);
   $("newVideo").classList.toggle("hidden", editor);
   $("title").textContent = editor ? projectName(state.meta) : "Captions";
+  $("version").classList.toggle("hidden", editor);
   if (!editor) $("saved").textContent = "";
 }
 
@@ -1055,3 +1056,4 @@ document.addEventListener("keydown", (e) => {
 syncStyleInputs();
 requestAnimationFrame(previewLoop);
 loadSettings().then(renderProjects);
+api("/api/version").then((v) => { $("version").textContent = `Version ${v.version}`; }).catch(() => {});

@@ -8,6 +8,7 @@ import WebKit
 /// Dossier du code (cloné depuis GitHub), écrit dans Info.plist au moment de la construction.
 let appDir = (Bundle.main.object(forInfoDictionaryKey: "CaptionsAppDir") as? String) ?? NSHomeDirectory() + "/Captions"
 let logPath = appDir + "/data/server.log"
+let updateFlag = appDir + "/data/.install-update"  // mise à jour acceptée depuis le menu, à installer au lancement
 let background = NSColor(red: 0.055, green: 0.063, blue: 0.075, alpha: 1)
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
     var server: Process?
     var port = 8765
     var quitting = false
+    var relaunchOnQuit = false
 
     // MARK: - Démarrage
 
@@ -42,15 +44,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
+        // La page change à chaque mise à jour : on ne garde jamais d'ancienne copie en cache.
+        WKWebsiteDataStore.default().removeData(
+            ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache], modifiedSince: .distantPast) {}
+
         showLoading("Recherche de mises à jour…")
         DispatchQueue.global(qos: .userInitiated).async { self.startBackend() }
     }
 
     func startBackend() {
-        // 1. Mise à jour depuis GitHub + dépendances (scripts/prepare.sh).
-        let prep = runScript(appDir + "/scripts/prepare.sh")
-        if prep.status != 0 {
-            return fail("La préparation a échoué.", details: prep.output)
+        let prepare = appDir + "/scripts/prepare.sh"
+
+        // 1. Mise à jour disponible sur GitHub ? On propose, on n'impose pas.
+        let check = runScript(prepare, ["check"])
+        let lines = check.output.split(separator: "\n").map(String.init)
+        let accepted = (try? FileManager.default.removeItem(atPath: updateFlag)) != nil
+        if check.status == 0, lines.first == "UPDATE", lines.count >= 3,
+           accepted || askForUpdate(current: lines[1], new: lines[2], changes: Array(lines.dropFirst(3))) {
+            DispatchQueue.main.async { self.showLoading("Installation de la mise à jour…") }
+            let update = runScript(prepare, ["update"])
+            if update.status != 0 {
+                return fail("La mise à jour a échoué.", details: update.output)
+            }
+            if update.output.contains("RELAUNCH") { return relaunch() }
+        }
+
+        // 2. Dépendances.
+        let start = runScript(prepare, ["start"])
+        if start.status != 0 {
+            return fail("La préparation a échoué.", details: start.output)
         }
 
         // 2. Serveur local, enfant de l'app : il s'arrête quand on quitte.
@@ -89,6 +111,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
             usleep(500_000)
         }
         fail("Le moteur de Captions n'a pas démarré.", details: logTail())
+    }
+
+    /// Fenêtre « Mise à jour disponible » (appelée hors du fil principal : on attend la réponse).
+    func askForUpdate(current: String, new: String, changes: [String]) -> Bool {
+        var accepted = false
+        DispatchQueue.main.sync {
+            let alert = NSAlert()
+            alert.messageText = "Mise à jour disponible : version \(new)"
+            let list = changes.map { "• \($0)" }.joined(separator: "\n")
+            alert.informativeText = "Tu as la version \(current).\n\nNouveautés :\n\(list)"
+            alert.addButton(withTitle: "Mettre à jour")
+            alert.addButton(withTitle: "Plus tard")
+            accepted = alert.runModal() == .alertFirstButtonReturn
+        }
+        return accepted
+    }
+
+    /// L'app elle-même a changé : on ouvre la nouvelle version et on ferme celle-ci.
+    func relaunch() {
+        DispatchQueue.main.async {
+            self.quitting = true
+            self.relaunchOnQuit = true
+            NSApp.terminate(nil)
+        }
     }
 
     func showLoading(_ status: String) {
@@ -149,16 +195,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
                     if case .success(let ok) = saved, ok as? Bool == true {
                         self.confirmBusyThenQuit()
                     } else {
-                        NSApp.reply(toApplicationShouldTerminate: false)
+                        self.cancelQuit()
                     }
                 }
             case .alertThirdButtonReturn:
                 self.confirmBusyThenQuit()
             default:
-                NSApp.reply(toApplicationShouldTerminate: false)
+                self.cancelQuit()
             }
         }
         return .terminateLater
+    }
+
+    func cancelQuit() {
+        relaunchOnQuit = false
+        try? FileManager.default.removeItem(atPath: updateFlag)
+        NSApp.reply(toApplicationShouldTerminate: false)
     }
 
     func confirmBusyThenQuit() {
@@ -171,16 +223,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
         alert.informativeText = "Si tu quittes maintenant, il sera interrompu."
         alert.addButton(withTitle: "Continuer le travail")
         alert.addButton(withTitle: "Quitter quand même")
-        NSApp.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSApp.reply(toApplicationShouldTerminate: true)
+        } else {
+            cancelQuit()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         quitting = true
-        guard let server, server.isRunning else { return }
-        server.terminate()
-        let deadline = Date().addingTimeInterval(3)
-        while server.isRunning && Date() < deadline { usleep(50_000) }
-        if server.isRunning { kill(server.processIdentifier, SIGKILL) }
+        if let server, server.isRunning {
+            server.terminate()
+            let deadline = Date().addingTimeInterval(3)
+            while server.isRunning && Date() < deadline { usleep(50_000) }
+            if server.isRunning { kill(server.processIdentifier, SIGKILL) }
+        }
+        if relaunchOnQuit { openNewInstance() }
+    }
+
+    func openNewInstance() {
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = ["-n", Bundle.main.bundlePath]
+        try? open.run()
     }
 
     // MARK: - Pont avec la page (Enregistrer sous…)
@@ -274,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "À propos de Captions", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Rechercher des mises à jour…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Masquer Captions", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Quitter Captions", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -307,12 +373,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
     @objc func reloadPage() { webView.reload() }
 
+    /// Menu Captions › Rechercher des mises à jour…
+    @objc func checkForUpdates() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let check = self.runScript(appDir + "/scripts/prepare.sh", ["check"])
+            let lines = check.output.split(separator: "\n").map(String.init)
+            guard lines.first == "UPDATE", lines.count >= 3 else {
+                return DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    alert.messageText = "Captions est à jour."
+                    alert.runModal()
+                }
+            }
+            guard self.askForUpdate(current: lines[1], new: lines[2], changes: Array(lines.dropFirst(3))) else { return }
+            // On quitte normalement (« Enregistrer les modifications ? » compris), puis la nouvelle ouverture
+            // installe la mise à jour sans redemander.
+            DispatchQueue.main.async {
+                FileManager.default.createFile(atPath: updateFlag, contents: nil)
+                self.relaunchOnQuit = true
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
     // MARK: - Utilitaires
 
-    func runScript(_ path: String) -> (status: Int32, output: String) {
+    func runScript(_ path: String, _ args: [String] = []) -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = [path]
+        process.arguments = [path] + args
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
