@@ -162,6 +162,21 @@
         <div class="bar hidden" id="exportBar"><div></div></div>
         <a id="downloadLink" class="primary button hidden" download>Télécharger</a>
       </section>
+
+      <section class="card" data-section="post">
+        <h2>5. Publication <span class="muted">· description et hashtags</span></h2>
+        <p class="muted small-text">Un prompt prêt à l'emploi avec tous les sous-titres de la vidéo. Il s'ouvre directement dans ChatGPT ou Claude, et il est aussi copié (⌘V si besoin).</p>
+        <div class="post-links">
+          <button id="postChatGPT" class="primary" data-url="https://chatgpt.com/?q=" disabled>Ouvrir dans ChatGPT</button>
+          <button id="postClaude" class="primary" data-url="https://claude.ai/new?q=" disabled>Ouvrir dans Claude</button>
+        </div>
+        <button id="postCopy" class="ghost spaced full" disabled>Copier le prompt seulement</button>
+        <div id="postStatus" class="status"></div>
+        <details>
+          <summary>Voir le prompt</summary>
+          <pre id="postPreview" class="post-preview"></pre>
+        </details>
+      </section>
     </div>
   </main>
 

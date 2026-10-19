@@ -259,6 +259,7 @@ $("redoBtn").addEventListener("click", redo);
 function afterChange() {
   refreshDirty();
   syncPresetSelect();
+  refreshPost();
 }
 
 // ---------- Style ----------
@@ -738,6 +739,7 @@ async function openProject(id) {
   ensureFont().then(invalidatePreview);
   invalidatePreview();
   refreshDirty();
+  refreshPost();
   resumeJobs(meta.id);
 }
 
@@ -1148,6 +1150,63 @@ document.addEventListener("keydown", (e) => {
     video.paused ? video.play() : video.pause();
   }
 });
+
+// ---------- Publication : prompt à coller dans ChatGPT ou Claude ----------
+
+function postPrompt() {
+  const subtitles = state.captions.map((c) => c.text.trim()).filter(Boolean).join(" ").replace(/\s+/g, " ");
+  return `Voici une nouvelle vidéo que je vais publier sur les réseaux sociaux du compte Burotic (TikTok et Instagram). Voici l'ensemble des sous-titres de la vidéo :
+
+« ${subtitles} »
+
+En te basant sur ce texte, formule-moi 10 variantes de description pour cette publication :
+- 3 avec des emojis, 3 sans emojis ;
+- 2 au look premium et épuré ;
+- 2 au ton humoristique.
+
+Pour chacune : une accroche forte dès les premiers mots, un texte fidèle au contenu de la vidéo (n'invente ni prix, ni promotion, ni chiffre), un français québécois naturel et professionnel. Ajoute 5 à 8 hashtags pertinents à la fin de chaque variante, dont #burotic.
+
+Termine en me disant laquelle tu choisirais et pourquoi.`;
+}
+
+// Le prompt suit le texte de la section 3 : à appeler après chaque changement des captions.
+function refreshPost() {
+  const ready = state.captions.some((c) => c.text.trim());
+  for (const id of ["postCopy", "postChatGPT", "postClaude"]) $(id).disabled = !ready;
+  $("postPreview").textContent = ready ? postPrompt() : "Transcris la vidéo d'abord : le prompt contiendra ses sous-titres.";
+  setStatus("postStatus", "");
+}
+
+$("postCopy").addEventListener("click", async () => {
+  await copyText(postPrompt());
+  setStatus("postStatus", "Prompt copié ✓ Colle-le (⌘V) dans ChatGPT ou Claude.", "ok");
+});
+
+// Ouvre une nouvelle discussion avec le prompt déjà dedans (ChatGPT l'envoie tout seul). Le prompt est
+// aussi copié : si le site ne le reprend pas (ex. page de connexion), ⌘V suffit.
+for (const id of ["postChatGPT", "postClaude"]) {
+  $(id).addEventListener("click", async (e) => {
+    const prompt = postPrompt();
+    await copyText(prompt);
+    const url = e.currentTarget.dataset.url + encodeURIComponent(prompt);
+    if (native) location.href = url; // l'app Mac ouvre les liens externes dans le navigateur par défaut
+    else window.open(url, "_blank");
+    setStatus("postStatus", "Ouvert dans ton navigateur ✓ Le prompt est aussi copié (⌘V si besoin).", "ok");
+  });
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Repli si le presse-papiers moderne n'est pas permis.
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+}
 
 // ---------- Sections repliables ----------
 

@@ -8,12 +8,16 @@ SOURCES=("$APP_DIR/native/main.swift" "$APP_DIR/scripts/build-app.sh" "$APP_DIR/
 HASH=$(cat "${SOURCES[@]}" | shasum | cut -d' ' -f1)
 if [[ "$1" == "--hash" ]]; then echo "$HASH"; exit 0; fi
 
-NAME=Captions
+# Un dossier de développement peut se construire une app séparée (ex. « Captions Test ») via un fichier
+# .app-name non publié : l'app installée chez l'utilisateur n'est alors jamais remplacée.
+NAME=$(cat "$APP_DIR/.app-name" 2>/dev/null || echo Captions)
+BUNDLE_ID=com.burotic.captions
+[[ "$NAME" == "Captions" ]] || BUNDLE_ID="$BUNDLE_ID.$(echo "$NAME" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
 TMP=$(mktemp -d)
 BUILD="$TMP/$NAME.app"
 mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
 
-xcrun swiftc -O -swift-version 5 -o "$BUILD/Contents/MacOS/$NAME" "$APP_DIR/native/main.swift"
+xcrun swiftc -O -swift-version 5 -o "$BUILD/Contents/MacOS/Captions" "$APP_DIR/native/main.swift"
 cp "$APP_DIR/assets/Captions.icns" "$BUILD/Contents/Resources/$NAME.icns"
 VERSION=$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)
 
@@ -22,8 +26,8 @@ cat > "$BUILD/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleExecutable</key><string>$NAME</string>
-  <key>CFBundleIdentifier</key><string>com.burotic.captions</string>
+  <key>CFBundleExecutable</key><string>Captions</string>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
   <key>CFBundleIconFile</key><string>$NAME</string>
