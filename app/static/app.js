@@ -1068,6 +1068,7 @@ $("exportBtn").addEventListener("click", async () => {
     form.append("band", JSON.stringify(band));
   }
   form.append("captions", JSON.stringify(items));
+  form.append("quality", $("exportMax").checked ? "max" : "standard");
 
   try {
     await api(`/api/export/${id}`, { method: "POST", body: form });
@@ -1149,6 +1150,13 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     video.paused ? video.play() : video.pause();
   }
+});
+
+// ---------- Qualité de l'export (mémorisée pour toutes les vidéos) ----------
+
+$("exportMax").addEventListener("change", () => {
+  state.settings.exportQuality = $("exportMax").checked ? "max" : "standard";
+  saveSettings();
 });
 
 // ---------- Publication : prompt à coller dans ChatGPT ou Claude ----------
@@ -1234,5 +1242,9 @@ document.querySelectorAll(".card[data-section] h2").forEach((h2) => {
 
 syncStyleInputs();
 requestAnimationFrame(previewLoop);
-loadSettings().then(() => { applyCollapsed(); renderProjects(); });
+loadSettings().then(() => {
+  applyCollapsed();
+  $("exportMax").checked = state.settings.exportQuality === "max";
+  renderProjects();
+});
 api("/api/version").then((v) => { $("version").textContent = `Version ${v.version}`; }).catch(() => {});

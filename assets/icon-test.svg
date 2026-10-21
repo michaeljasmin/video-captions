@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Icône Captions Test (fond vert, pour la distinguer de l'app installée) : « subtitles » de Lucide, au gabarit des icônes macOS (carré arrondi de 824 px). -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#86EFAC"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#shadow)"/>
+  <g transform="translate(512 520) scale(24) translate(-12 -12)"
+     fill="#ffffff" fill-opacity="0.9" stroke="#222222" stroke-width="1.7"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"/>
+    <path d="M7 13h4"/>
+    <path d="M15 13h2"/>
+    <path d="M7 9h2"/>
+    <path d="M13 9h4"/>
+  </g>
+</svg>

@@ -4,7 +4,7 @@
 # des sources, utilisée par prepare.sh pour savoir s'il faut reconstruire.
 set -e
 APP_DIR="${0:A:h:h}"
-SOURCES=("$APP_DIR/native/main.swift" "$APP_DIR/scripts/build-app.sh" "$APP_DIR/assets/Captions.icns")
+SOURCES=("$APP_DIR/native/main.swift" "$APP_DIR/scripts/build-app.sh" "$APP_DIR/assets/Captions.icns" "$APP_DIR/assets/Captions-test.icns")
 HASH=$(cat "${SOURCES[@]}" | shasum | cut -d' ' -f1)
 if [[ "$1" == "--hash" ]]; then echo "$HASH"; exit 0; fi
 
@@ -12,13 +12,17 @@ if [[ "$1" == "--hash" ]]; then echo "$HASH"; exit 0; fi
 # .app-name non publié : l'app installée chez l'utilisateur n'est alors jamais remplacée.
 NAME=$(cat "$APP_DIR/.app-name" 2>/dev/null || echo Captions)
 BUNDLE_ID=com.burotic.captions
-[[ "$NAME" == "Captions" ]] || BUNDLE_ID="$BUNDLE_ID.$(echo "$NAME" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
+ICON="$APP_DIR/assets/Captions.icns"
+if [[ "$NAME" != "Captions" ]]; then
+  BUNDLE_ID="$BUNDLE_ID.$(echo "$NAME" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
+  ICON="$APP_DIR/assets/Captions-test.icns"  # fond vert : on la distingue de l'app installée
+fi
 TMP=$(mktemp -d)
 BUILD="$TMP/$NAME.app"
 mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
 
 xcrun swiftc -O -swift-version 5 -o "$BUILD/Contents/MacOS/Captions" "$APP_DIR/native/main.swift"
-cp "$APP_DIR/assets/Captions.icns" "$BUILD/Contents/Resources/$NAME.icns"
+cp "$ICON" "$BUILD/Contents/Resources/$NAME.icns"
 VERSION=$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)
 
 cat > "$BUILD/Contents/Info.plist" <<PLIST

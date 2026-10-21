@@ -362,17 +362,24 @@ def transcribe_status(vid: str):
 
 # ---------- Export ----------
 
-def encoder_args(meta: dict) -> tuple[list[str], str]:
+# CRF : plus bas = plus fidèle (et fichier plus gros). « max » : option Qualité maximale de l'export.
+# Mesuré sur une vidéo 1080p60 de 63 s (91 Mo) : CRF 15 → 99 Mo, VMAF 94,8 ; CRF 10 → 184 Mo, VMAF 96,2,
+# export ~25 % plus long. Au-delà, le gain plafonne : la source est elle-même déjà compressée.
+CRF = {"standard": {"x264": 15, "x265": 16}, "max": {"x264": 10, "x265": 11}}
+
+
+def encoder_args(meta: dict, quality: str = "standard") -> tuple[list[str], str]:
     """Réencodage visuellement sans perte, en gardant le codec, la profondeur et les couleurs d'origine."""
+    crf = CRF.get(quality, CRF["standard"])
     pix_fmt = meta["pix_fmt"]
     ten_bit = "10" in pix_fmt
     if ten_bit or meta["codec"] == "hevc":
         out_fmt = "yuv420p10le" if ten_bit else "yuv420p"
-        args = ["-c:v", "libx265", "-crf", "16", "-preset", "medium", "-tag:v", "hvc1",
+        args = ["-c:v", "libx265", "-crf", str(crf["x265"]), "-preset", "medium", "-tag:v", "hvc1",
                 "-x265-params", "log-level=error", "-pix_fmt", out_fmt]
     else:
         out_fmt = "yuv420p"
-        args = ["-c:v", "libx264", "-crf", "15", "-preset", "slow", "-pix_fmt", out_fmt]
+        args = ["-c:v", "libx264", "-crf", str(crf["x264"]), "-preset", "slow", "-pix_fmt", out_fmt]
     for flag, key in (("-color_primaries", "color_primaries"), ("-color_trc", "color_transfer"),
                       ("-colorspace", "color_space")):
         if meta.get(key) and meta[key] != "unknown":
@@ -400,14 +407,14 @@ def write_caption_track(cap_dir: Path, captions: list[dict]) -> Path:
     return track
 
 
-def run_export(vid: str, captions: list[dict], band: dict | None):
+def run_export(vid: str, captions: list[dict], band: dict | None, quality: str = "standard"):
     job = jobs[f"e-{vid}"]
     d = DATA / vid
     meta = read_meta(d)
     src = d / f"source{meta['ext']}"
     out_ext = ".mov" if meta["ext"] == ".mov" else ".mp4"
     out = d / f"export{out_ext}"
-    enc, overlay_fmt = encoder_args(meta)
+    enc, overlay_fmt = encoder_args(meta, quality)
 
     cmd = ["ffmpeg", "-y", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1", "-i", str(src)]
     if captions and band:
@@ -463,6 +470,7 @@ async def export(vid: str, request: Request):
     form = await request.form(max_files=20000)
     captions = json.loads(form["captions"])
     band = json.loads(form["band"]) if form.get("band") else None
+    quality = "max" if form.get("quality") == "max" else "standard"
     if captions and not (isinstance(band, dict) and {"x", "y"} <= band.keys() and "blank" in form):
         raise HTTPException(400, "Export incomplet : zone ou image vide manquante")
     cap_dir = d / "captions"
@@ -474,7 +482,7 @@ async def export(vid: str, request: Request):
         (cap_dir / "blank.png").write_bytes(await form["blank"].read())
 
     jobs[key] = {"status": "queued", "progress": 0.0, "started": time.time()}
-    threading.Thread(target=run_export, args=(vid, captions, band), daemon=True).start()
+    threading.Thread(target=run_export, args=(vid, captions, band, quality), daemon=True).start()
     return {"status": "queued"}
 
 

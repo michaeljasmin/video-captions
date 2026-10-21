@@ -132,3 +132,13 @@ def test_export_without_captions_keeps_video_and_audio(client, media, data_dir):
     streams = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0",
                               str(data_dir / vid / "export.mp4")], capture_output=True, text=True).stdout.split()
     assert streams == ["video", "audio"]
+
+
+def test_max_quality_export_keeps_more_detail_than_standard(client, media, data_dir):
+    vid = upload(client, media / "video.mp4").json()["id"]
+    sizes = {}
+    for quality in ("standard", "max"):
+        assert client.post(f"/api/export/{vid}", data={"captions": "[]", "quality": quality}).status_code == 200
+        assert wait_export(client, vid)["status"] == "done"
+        sizes[quality] = (data_dir / vid / "export.mp4").stat().st_size
+    assert sizes["max"] > sizes["standard"] * 1.1, sizes
