@@ -21,7 +21,9 @@ TMP=$(mktemp -d)
 BUILD="$TMP/$NAME.app"
 mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
 
-xcrun swiftc -O -swift-version 5 -o "$BUILD/Contents/MacOS/Captions" "$APP_DIR/native/main.swift"
+# Cible explicite : sans elle, swiftc peut viser une version de macOS plus récente que celle du Mac
+# (« You can't use this version of the application »). À garder aligné sur LSMinimumSystemVersion.
+xcrun swiftc -O -swift-version 5 -target arm64-apple-macos13.0 -o "$BUILD/Contents/MacOS/Captions" "$APP_DIR/native/main.swift"
 cp "$ICON" "$BUILD/Contents/Resources/$NAME.icns"
 VERSION=$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)
 
